@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>كاميرا تلقائية - بدون ضغط</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+        video {
+            width: 90%;
+            max-width: 800px;
+            border: 5px solid #333;
+            border-radius: 15px;
+            margin-top: 20px;
+        }
+        .msg {
+            font-size: 22px;
+            color: #333;
+            margin: 20px;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>الكاميرا ستشتغل تلقائيًا...</h1>
+    <p class="msg">انتظر ثواني، سيطلب منك الإذن مرة واحدة فقط</p>
+    <video id="video" autoplay playsinline muted></video>
+    <p class="msg" id="status"></p>
+
+    <script>
+        // تشغيل الكاميرا تلقائيًا بمجرد تحميل الصفحة
+        (async () => {
+            const video = document.getElementById('video');
+            const status = document.getElementById('status');
+
+            try {
+                status.textContent = "جاري طلب الإذن...";
+                status.style.color = "#0066cc";
+
+                // طلب الكاميرا (فيديو فقط)
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: "user"  // الكاميرا الأمامية (غيّرها إلى "environment" للخلفية)
+                    } 
+                });
+
+                video.srcObject = stream;
+                status.textContent = "الكاميرا تعمل الآن! 🎉";
+                status.style.color = "green";
+
+            } catch (err) {
+                status.textContent = "فشل تشغيل الكاميرا 😔";
+                status.classList.add("error");
+                console.error("خطأ:", err);
+
+                // رسائل توضيحية شائعة
+                if (err.name === "NotAllowedError") {
+                    status.textContent += " (رفضت الإذن أو الكاميرا مستخدمة ببرنامج آخر)";
+                } else if (err.name === "NotFoundError") {
+                    status.textContent += " (لا توجد كاميرا في الجهاز)";
+                }
+            }
+        })();
+    </script>
+</body>
+</html>
