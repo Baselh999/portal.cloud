@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ar">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GPS مع خريطة وإرسال</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 12px; }
+    h1 { font-size: 20px; }
+    #map { height: 360px; border: 1px solid #ddd; margin-top: 10px; display: none; }
+    #status { margin-top: 10px; white-space: pre-line; }
+    button { padding: 10px 14px; font-size: 16px; margin-right: 8px; }
+    .controls { margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>الحصول على الموقع الجغرافي</h1>
+  <div class="controls">
+    <button id="btn-get">الحصول على الموقع</button>
+    <button id="btn-send" disabled>إرسال الموقع</button>
+    <button id="btn-reset">إعادة ضبط</button>
+  </div>
+
+  <div id="status">الحالة: جاهز.</div>
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+  const ENDPOINT_URL = "https://webhook.site/REPLACE_WITH_YOUR_ID"; // غيّر هذا الرابط
+
+  const statusEl = document.getElementById('status');
+  const btnGet = document.getElementById('btn-get');
+  const btnSend = document.getElementById('btn-send');
+  const btnReset = document.getElementById('btn-reset');
+  const mapEl = document.getElementById('map');
+
+  let currentPos = null;
+  let map = null;
+  let marker = null;
+
+  function logStatus(text) {
+    statusEl.textContent = "الحالة: " + text;
+    console.log(text);
+  }
+
+  function initMap(lat, lon) {
+    if (!map) {
+      mapEl.style.display = "block";
+      map = L.map('map').setView([lat, lon], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+      marker = L.marker([lat, lon]).addTo(map)
+        .bindPopup(`موقعي: ${lat.toFixed(6)}, ${lon.toFixed(6)}`).openPopup();
+    } else {
+      map.setView([lat, lon], 15);
+      marker.setLatLng([lat, lon])
+        .setPopupContent(`موقعي: ${lat.toFixed(6)}, ${lon.toFixed(6)}`);
+    }
+  }
+
+  function getLocation() {
+    if (!navigator.geolocation) {
+      logStatus("المتصفح لا يدعم الحصول على الموقع.");
+      return;
+    }
+    logStatus("طلب الموقع...");
+    btnGet.disabled = true;
+
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        currentPos = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          timestamp: new Date(pos.timestamp).toISOString()
+        };
+        logStatus(`تم الحصول على الموقع:
+خط العرض: ${currentPos.latitude}
+خط الطول: ${currentPos.longitude}
+دقة التقريب: ${currentPos.accuracy} متر`);
+        initMap(currentPos.latitude, currentPos.longitude);
+        btnSend.disabled = false;
+      },
+      err => {
+        logStatus("فشل الحصول على الموقع: " + err.message);
+        btnGet.disabled = false;
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  }
+
+  async function sendLocation() {
+    if (!currentPos) { logStatus("لا يوجد موقع لإرساله."); return; }
+    if (!confirm("هل تريد إرسال موقعك الآن؟")) return;
+
+    logStatus("جارٍ إرسال الموقع...");
+    btnSend.disabled = true;
+
+    try {
+      const resp = await fetch(ENDPOINT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(currentPos)
+      });
+      const j = await resp.json().catch(()=>null);
+      logStatus("تم الإرسال بنجاح. رد السيرفر: " + (j ? JSON.stringify(j) : "no-json"));
+    } catch (e) {
+      logStatus("فشل الإرسال: " + e.message);
+      btnSend.disabled = false;
+    }
+  }
+
+  function resetAll() {
+    currentPos = null;
+    btnGet.disabled = false;
+    btnSend.disabled = true;
+    mapEl.style.display = "none";
+    if (map) { map.remove(); map = null; marker = null; }
+    logStatus("تمت إعادة الضبط. جاهز.");
+  }
+
+  btnGet.addEventListener('click', getLocation);
+  btnSend.addEventListener('click', sendLocation);
+  btnReset.addEventListener('click', resetAll);
+  </script>
+</body>
+</html>
