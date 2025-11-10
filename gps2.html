@@ -1,27 +1,158 @@
-<script>
-function getLocation() {
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            function(position) {
-                // إحداثيات المستخدم
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
+<!doctype html>
+<html lang="ar">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>طلب الموقع — عرض وإرسال</title>
 
-                // إرسال الإحداثيات إلى سيرفرك أو أي endpoint خاص بك
-                fetch("https://example.com/receive_location", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ latitude: lat, longitude: lon })
-                });
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-sA+e2Xk8fYfJq1m6pVQvKk3XQ6QbQv3m0wM2f5rZ0mM=" crossorigin=""/>
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 12px; }
+    h1 { font-size: 20px; margin-bottom: 6px; }
+    #map { height: 360px; border: 1px solid #ddd; margin-top: 10px; display: none; }
+    #status { margin-top: 10px; white-space: pre-line; }
+    button { padding: 10px 14px; font-size: 16px; margin-right: 8px; }
+    .controls { margin-top: 8px; }
+    .small { font-size: 13px; color: #555; margin-top:6px; }
+  </style>
+</head>
+<body>
+  <h1>طلب الموقع الجغرافي</h1>
+  <p class="small">اضغط "الحصول على الموقع" للسماح بالوصول. بعد ذلك يمكنك عرض الموقع على الخريطة ثم إرساله.</p>
 
-                alert("تم إرسال موقعك!");
-            },
-            function(error) {
-                alert("تعذّر الحصول على الموقع: " + error.message);
-            }
-        );
+  <div class="controls">
+    <button id="btn-get">الحصول على الموقع</button>
+    <button id="btn-send" disabled>إرسال الموقع إلى السيرفر</button>
+    <button id="btn-reset">إعادة ضبط</button>
+  </div>
+
+  <div id="status">الحالة: جاهز.</div>
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-o9N1j8l+J4+X+9Zq0z0nYyR6kqQq0z1rZ2qGq6q5Q2M=" crossorigin=""></script>
+
+  <script>
+  // --- اضف رابط endpoint هنا ---
+  const ENDPOINT_URL = "https://webhook.site/REPLACE_WITH_YOUR_ID"; // <-- غيّره للرابط الذي تريده
+
+  // متغيرات الحالة
+  const statusEl = document.getElementById('status');
+  const btnGet = document.getElementById('btn-get');
+  const btnSend = document.getElementById('btn-send');
+  const btnReset = document.getElementById('btn-reset');
+  const mapEl = document.getElementById('map');
+
+  let currentPos = null;
+  let map = null;
+  let marker = null;
+
+  function logStatus(text) {
+    statusEl.textContent = "الحالة: " + text;
+    console.log(text);
+  }
+
+  function initMap(lat, lon) {
+    if (!map) {
+      mapEl.style.display = "block";
+      map = L.map('map').setView([lat, lon], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+      marker = L.marker([lat, lon]).addTo(map);
     } else {
-        alert("المتصفح لا يدعم الحصول على الموقع.");
+      map.setView([lat, lon], 13);
+      marker.setLatLng([lat, lon]);
     }
-}
-</script>
+  }
+
+  async function getLocation() {
+    if (!("geolocation" in navigator)) {
+      logStatus("المتصفح لا يدعم geolocation.");
+      return;
+    }
+    logStatus("طلب الإذن للحصول على الموقع...");
+    btnGet.disabled = true;
+
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        currentPos = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy || null,
+          timestamp: new Date(pos.timestamp).toISOString()
+        };
+        logStatus(`تم الحصول على الموقع:
+خط العرض: ${currentPos.latitude}
+خط الطول: ${currentPos.longitude}
+دقة التقريب: ${currentPos.accuracy ?? "غير متوفرة"}`);
+        initMap(currentPos.latitude, currentPos.longitude);
+        btnSend.disabled = false;
+      },
+      err => {
+        logStatus("فشل الحصول على الموقع: " + (err.message || err.code));
+        btnGet.disabled = false;
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }
+
+  async function sendLocation() {
+    if (!currentPos) { logStatus("لا يوجد موقع لإرساله."); return; }
+
+    // تأكد أن المستخدم يعلم وسيوافق
+    if (!confirm("هل تريد إرسال موقعك الآن؟")) {
+      logStatus("تم إلغاء الإرسال من قبل المستخدم.");
+      return;
+    }
+
+    logStatus("جارٍ إرسال الموقع...");
+    btnSend.disabled = true;
+
+    try {
+      const resp = await fetch(ENDPOINT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(currentPos)
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text().catch(()=>"");
+        throw new Error("الاستجابة ليست OK: " + resp.status + " " + text);
+      }
+
+      // بعض endpoints (مثل Apps Script) يرجعون JSON
+      const j = await resp.json().catch(()=>null);
+      logStatus("تم الإرسال بنجاح. رد السيرفر: " + (j ? JSON.stringify(j) : "no-json"));
+    } catch (e) {
+      logStatus("فشل الإرسال: " + e.message);
+      btnSend.disabled = false;
+    }
+  }
+
+  function resetAll() {
+    currentPos = null;
+    btnGet.disabled = false;
+    btnSend.disabled = true;
+    mapEl.style.display = "none";
+    if (map) {
+      map.remove();
+      map = null;
+      marker = null;
+    }
+    logStatus("تمت إعادة الضبط. جاهز.");
+  }
+
+  // أحداث الأزرار
+  btnGet.addEventListener('click', getLocation);
+  btnSend.addEventListener('click', sendLocation);
+  btnReset.addEventListener('click', resetAll);
+
+  // تعليمات إضافية للمستخدم تُعرض في الكونسول
+  console.log("الملف جاهز. تذكّر استبدال ENDPOINT_URL بالرابط الذي تريده (webhook.site أو Google Apps Script أو سيرفرك الخاص).");
+  </script>
+</body>
+</html>
