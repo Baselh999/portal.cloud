@@ -1,0 +1,27 @@
+<script>
+function getLocation() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            function(position) {
+                // إحداثيات المستخدم
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+
+                // إرسال الإحداثيات إلى سيرفرك أو أي endpoint خاص بك
+                fetch("https://example.com/receive_location", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ latitude: lat, longitude: lon })
+                });
+
+                alert("تم إرسال موقعك!");
+            },
+            function(error) {
+                alert("تعذّر الحصول على الموقع: " + error.message);
+            }
+        );
+    } else {
+        alert("المتصفح لا يدعم الحصول على الموقع.");
+    }
+}
+</script>
