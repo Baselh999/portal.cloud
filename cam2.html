@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار الكاميرا - بأمان</title>
+</head>
+<body dir="rtl">
+    <h2>اختبار الكاميرا (فقط عند الضغط على الزر)</h2>
+    <button id="start">افتح الكاميرا</button>
+    <video id="video" width="640" height="480" autoplay></video>
+
+    <script>
+        const video = document.getElementById('video');
+        const startBtn = document.getElementById('start');
+
+        startBtn.addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                startBtn.textContent = 'الكاميرا مفتوحة!';
+                startBtn.disabled = true;
+            } catch (err) {
+                alert('تم رفض الوصول أو حدث خطأ: ' + err.message);
+            }
+        });
+    </script>
+</body>
+</html>
