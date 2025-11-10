@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ar">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>التقاط سيلفي</title>
+  <style>
+    body{font-family:system-ui,Arial;margin:12px}
+    h1{font-size:20px}
+    #video{width:100%;max-height:60vh;background:#000;display:none;border-radius:8px}
+    #preview{max-width:100%;display:none;margin-top:8px;border:1px solid #ccc;border-radius:8px}
+    .controls{margin-top:10px}
+    button{padding:10px 14px;margin:6px 6px 6px 0;font-size:15px}
+    #status{margin-top:8px;color:#333;white-space:pre-line}
+    .note{font-size:13px;color:#555;margin-top:6px}
+  </style>
+</head>
+<body>
+  <h1>التقاط سيلفي (الكاميرا الأمامية)</h1>
+  <p class="note">اضغط "فتح الكاميرا" ثم امنح الإذن. بعد ظهور المعاينة اضغط "التقاط سيلفي". تأكد من أن الضيف وافق.</p>
+
+  <div class="controls">
+    <button id="openBtn">فتح الكاميرا</button>
+    <button id="captureBtn" disabled>التقاط سيلفي</button>
+    <button id="useFileBtn">اختر صورة من المعرض (بديل)</button>
+    <input id="fileInput" type="file" accept="image/*" style="display:none">
+    <button id="sendBtn" disabled>إرسال الصورة إلى السيرفر</button>
+    <button id="stopBtn" disabled>إيقاف الكاميرا</button>
+  </div>
+
+  <div id="status">الحالة: جاهز.</div>
+
+  <video id="video" autoplay playsinline></video>
+  <img id="preview" alt="معاينة السيلفي">
+
+  <script>
+    // --- ضع رابط استقبال الصور هنا (HTTPS) أو اتركه فارغاً إذا لا تحتاج الإرسال ---
+    const ENDPOINT_URL = ""; // مثال: "https://webhook.site/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+    const openBtn = document.getElementById('openBtn');
+    const captureBtn = document.getElementById('captureBtn');
+    const useFileBtn = document.getElementById('useFileBtn');
+    const fileInput = document.getElementById('fileInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const stopBtn = document.getElementById('stopBtn');
+
+    const statusEl = document.getElementById('status');
+    const video = document.getElementById('video');
+    const preview = document.getElementById('preview');
+
+    let stream = null;
+    let lastDataUrl = null; // الصورة الأخيرة كـ data URL
+
+    function log(s){ statusEl.textContent = "الحالة: " + s; console.log(s); }
+
+    // افتح الكاميرا الأمامية (selfie)
+    async function openCamera(){
+      log("طلب إذن الكاميرا...");
+      openBtn.disabled = true;
+      try {
+        // نطلب الكاميرا الأمامية عبر facingMode:"user"
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+        video.srcObject = stream;
+        video.style.display = "block";
+        captureBtn.disabled = false;
+        stopBtn.disabled = false;
+        log("الكاميرا مفتوحة. اضغط 'التقاط سيلفي' عندما يكون الضيف جاهزاً.");
+      } catch (err) {
+        console.error(err);
+        log("فشل فتح الكاميرا: " + (err.message||err.name) + ". جرّب اختيار الصورة من المعرض.");
+        openBtn.disabled = false;
+      }
+    }
+
+    // التقاط صورة من بث الفيديو
+    function captureSelfie(){
+      if (!stream) { log("لا يوجد بث كاميرا."); return; }
+      // نرسم إطار الفيديو على canvas
+      const w = video.videoWidth || 1280;
+      const h = video.videoHeight || 720;
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      // بعض الأجهزة تعرض الفيديو مقلوباً أفقياً عند الكاميرا الأمامية، لكن drawImage يأخذ الشكل كما هو.
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85); // جودة 85%
+      lastDataUrl = dataUrl;
+      preview.src = dataUrl;
+      preview.style.display = "block";
+      sendBtn.disabled = ENDPOINT_URL ? false : true;
+      log("تم التقاط السيلفي. يمكنك إرساله أو حفظه.");
+    }
+
+    // اختيار صورة من المعرض (بديل)
+    useFileBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = function(evt){
+        lastDataUrl = evt.target.result;
+        preview.src = lastDataUrl;
+        preview.style.display = "block";
+        sendBtn.disabled = ENDPOINT_URL ? false : true;
+        log("تم اختيار صورة من المعرض.");
+      }
+      reader.readAsDataURL(f);
+    });
+
+    // إيقاف الكاميرا
+    function stopCamera(){
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+      }
+      video.style.display = "none";
+      captureBtn.disabled = true;
+      stopBtn.disabled = true;
+      openBtn.disabled = false;
+      log("تم إيقاف الكاميرا.");
+    }
+
+    // إرسال الصورة إلى ENDPOINT_URL (كمحتوى JSON يحتوي على data URL)
+    async function sendImage(){
+      if (!ENDPOINT_URL) {
+        alert("لم يتم تعيين ENDPOINT_URL داخل الكود. عيّنه إن أردت الإرسال.");
+        return;
+      }
+      if (!lastDataUrl) { log("لا توجد صورة لإرسال."); return; }
+      if (!confirm("هل تريد إرسال هذه الصورة الآن؟ تأكد من موافقة الضيف.")) {
+        log("إرسال ملغي من المستخدم.");
+        return;
+      }
+
+      log("جارٍ إرسال الصورة...");
+      sendBtn.disabled = true;
+
+      try {
+        const payload = {
+          time: new Date().toISOString(),
+          image: lastDataUrl
+        };
+        const resp = await fetch(ENDPOINT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!resp.ok) {
+          const txt = await resp.text().catch(()=>"");
+          throw new Error("رد السيرفر: " + resp.status + " " + txt);
+        }
+        const j = await resp.json().catch(()=>null);
+        log("تم الإرسال بنجاح. رد السيرفر: " + (j ? JSON.stringify(j) : "no-json"));
+      } catch (e) {
+        console.error(e);
+        log("فشل الإرسال: " + (e.message || e));
+        sendBtn.disabled = false;
+      }
+    }
+
+    // أحداث الأزرار
+    openBtn.addEventListener('click', openCamera);
+    captureBtn.addEventListener('click', captureSelfie);
+    stopBtn.addEventListener('click', stopCamera);
+    sendBtn.addEventListener('click', sendImage);
+
+    // عند مغادرة الصفحة أوقف الكاميرا
+    window.addEventListener('beforeunload', stopCamera);
+
+    // إعلام المستخدم إن لم يدعم المتصفح
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      log("المتصفح قد لا يدعم الوصول المباشر للكاميرا. سيعمل خيار اختيار الصورة من المعرض كبديل.");
+    } else {
+      log("جاهز. اضغط 'فتح الكاميرا' أو اختر صورة من المعرض.");
+    }
+  </script>
+</body>
+</html>
