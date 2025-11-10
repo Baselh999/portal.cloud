@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>طلب الموقع الجغرافي</title>
+</head>
+<body>
+    <h1>طلب الموقع الجغرافي</h1>
+    <p>اضغط الزر للسماح بالوصول لموقعك:</p>
+    <button onclick="getLocation()">أرسل موقعي</button>
+    <p id="status"></p>
+    <p id="coords"></p>
+
+    <script>
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        document.getElementById("status").innerText = "تم الحصول على الموقع!";
+                        document.getElementById("coords").innerText =
+                            "خط العرض: " + position.coords.latitude + 
+                            "\nخط الطول: " + position.coords.longitude;
+                    },
+                    function(error) {
+                        document.getElementById("status").innerText = "تعذّر الحصول على الموقع: " + error.message;
+                    }
+                );
+            } else {
+                document.getElementById("status").innerText = "المتصفح لا يدعم الحصول على الموقع.";
+            }
+        }
+    </script>
+</body>
+</html>
