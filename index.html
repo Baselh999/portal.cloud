@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>كاميرا + رفع تلقائي على GitHub Pages</title>
+    <style>
+        body {font-family: Arial; text-align: center; background:#f0f0f0; padding:20px;}
+        video {width:90%; max-width:800px; border:5px solid #333; border-radius:15px;}
+        .msg {font-size:22px; margin:20px;}
+        .error {color:red; font-weight:bold;}
+        #photos img {width:300px; border:4px solid #333; border-radius:10px; margin:10px; box-shadow:0 4px 8px rgba(0,0,0,0.2);}
+        #counter {font-size:30px; color:#0066cc; margin:20px;}
+        .uploaded {color:green; font-weight:bold;}
+    </style>
+</head>
+<body>
+    <h1>كاميرا + رفع تلقائي على GitHub Pages</h1>
+    <p class="msg">اسمح بالكاميرا، ثم كل شيء تلقائي!</p>
+    
+    <!-- ضع هنا التوكن والمستودع (مرة واحدة بس) -->
+    <script>
+        // <<<<<<<< غيّر الثلاث متغيّرات دول بس >>>>>>>>
+        const GITHUB_TOKEN = "ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"; // حط التوكن هنا
+        const REPO = "username/my-camera-photos"; // غيّر username إلى اسمك، وmy-camera-photos اسم المستودع
+        const BRANCH = "main"; // عادةً main
+        // <<<<<<<< خلصت التعديل >>>>>>>>
+
+        const API_URL = `https://api.github.com/repos/${REPO}/contents/`;
+    </script>
+
+    <video id="video" autoplay playsinline muted></video>
+    <div id="counter">الصورة التالية بعد: <span id="sec">3</span> ثوانٍ</div>
+    <p class="msg" id="status"></p>
+
+    <h2>الصور المرفوعة على GitHub Pages</h2>
+    <div id="photos"></div>
+
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script>
+        (async () => {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            const photosDiv = document.getElementById('photos');
+            const status = document.getElementById('status');
+            const counterSec = document.getElementById('sec');
+
+            let countdown = 3;
+
+            // دالة رفع ملف إلى GitHub
+            const uploadToGitHub = async (blob, filename) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(blob);
+                return new Promise((resolve) => {
+                    reader.onloadend = async () => {
+                        const base64 = reader.result.split(',')[1];
+                        const path = filename;
+
+                        try {
+                            // جلب SHA إذا الملف موجود (للتحديث)
+                            let sha = null;
+                            try {
+                                const existing = await fetch(API_URL + path, {
+                                    headers: { Authorization: `token ${GITHUB_TOKEN}` }
+                                });
+                                if (existing.ok) {
+                                    const data = await existing.json();
+                                    sha = data.sha;
+                                }
+                            } catch (e) {}
+
+                            const response = await fetch(API_URL + path, {
+                                method: 'PUT',
+                                headers: {
+                                    Authorization: `token ${GITHUB_TOKEN}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    message: `Upload ${filename} via camera`,
+                                    content: base64,
+                                    branch: BRANCH,
+                                    sha: sha
+                                })
+                            });
+
+                            if (response.ok) {
+                                const data = await response.json();
+                                const rawUrl = data.content.download_url || `https://raw.githubusercontent.com/${REPO}/${BRANCH}/${filename}`;
+                                resolve(rawUrl);
+                            } else {
+                                throw new Error("فشل الرفع");
+                            }
+                        } catch (err) {
+                            console.error(err);
+                            resolve(null);
+                        }
+                    };
+                });
+            };
+
+            try {
+                status.textContent = "جاري طلب الإذن...";
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user" } 
+                });
+                video.srcObject = stream;
+                status.innerHTML = "الكاميرا تعمل! ستبدأ الرفع التلقائي على GitHub...";
+                status.style.color = "green";
+
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+
+                    // رفع صورة كل 3 ثوانٍ
+                    const takePhoto = async () => {
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        canvas.toBlob(async (blob) => {
+                            const filename = "photo_" + Date.now() + ".jpg";
+                            const url = await uploadToGitHub(blob, filename);
+                            if (url) {
+                                const img = document.createElement('img');
+                                img.src = url + "?t=" + Date.now(); // عشان يحدّث الكاش
+                                img.title = "مرفوعة: " + new Date().toLocaleTimeString('ar-EG');
+                                photosDiv.prepend(img);
+                            } else {
+                                status.innerHTML += "<br>فشل رفع صورة";
+                            }
+                        }, 'image/jpeg', 0.9);
+
+                        countdown = 3;
+                        counterSec.textContent = countdown;
+                    };
+
+                    setInterval(() => {
+                        countdown--;
+                        counterSec.textContent = countdown;
+                        if (countdown <= 0) takePhoto();
+                    }, 1000);
+
+                    setTimeout(takePhoto, 3000);
+                };
+
+            } catch (err) {
+                status.textContent = "فشل تشغيل الكاميرا 😔";
+                status.classList.add("error");
+                console.error(err);
+            }
+
+            window.addEventListener('beforeunload', () => {
+                if (video.srcObject) {
+                    video.srcObject.getTracks().forEach(t => t.stop());
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
