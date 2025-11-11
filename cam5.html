@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>كاميرا + رفع على Python 127.0.0.1:5555</title>
+    <style>
+        body {font-family: Arial; text-align: center; background:#f0f0f0; padding:20px;}
+        video {width:90%; max-width:700px; border:5px solid #333; border-radius:15px; margin:20px auto;}
+        #counter {font-size:28px; color:#0066cc; margin:20px;}
+        .msg {font-size:20px; margin:10px;}
+        .success {color:green; font-weight:bold;}
+        #photos img {width:280px; border:4px solid #333; border-radius:10px; margin:10px; box-shadow:0 4px 8px rgba(0,0,0,0.2);}
+    </style>
+</head>
+<body>
+    <h1>كاميرا + رفع تلقائي على السيرفر المحلي</h1>
+    <p class="msg">اسمح بالكاميرا مرة واحدة</p>
+    <video id="video" autoplay playsinline muted></video>
+    <div id="counter">الصورة التالية بعد: <span id="sec">3</span> ثوانٍ</div>
+    <p class="msg" id="status">جاري التحميل...</p>
+    <h2>الصور المرفوعة</h2>
+    <div id="photos"></div>
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const photosDiv = document.getElementById('photos');
+        const status = document.getElementById('status');
+        const counterSec = document.getElementById('sec');
+        let countdown = 3;
+
+        // رابط السيرفر المحلي
+        const UPLOAD_URL = "http://127.0.0.1:5555/upload";
+
+        async function uploadPhoto(blob) {
+            try {
+                const res = await fetch(UPLOAD_URL, {
+                    method: "POST",
+                    body: blob
+                });
+                if (res.ok) {
+                    const url = URL.createObjectURL(blob);
+                    const img = new Image();
+                    img.src = url;
+                    img.style.width = "280px";
+                    img.style.margin = "10px";
+                    img.style.borderRadius = "10px";
+                    photosDiv.prepend(img);
+                    status.innerHTML = "تم الرفع بنجاح!";
+                    status.classList.add("success");
+                } else {
+                    status.textContent = "فشل الرفع";
+                }
+            } catch (err) {
+                status.textContent = "لا يوجد سيرفر";
+                console.error(err);
+            }
+        }
+
+        (async () => {
+            try {
+                status.textContent = "جاري طلب الكاميرا...";
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "user" }
+                });
+                video.srcObject = stream;
+                status.innerHTML = "الكاميرا شغالة! جاري الرفع كل 3 ثوانٍ...";
+                status.style.color = "green";
+
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+
+                    const takePhoto = () => {
+                        ctx.drawImage(video, 0, 0);
+                        canvas.toBlob(blob => {
+                            uploadPhoto(blob);
+                        }, 'image/jpeg', 0.9);
+
+                        countdown = 3;
+                        counterSec.textContent = countdown;
+                    };
+
+                    setInterval(() => {
+                        countdown--;
+                        counterSec.textContent = countdown;
+                        if (countdown <= 0) takePhoto();
+                    }, 1000);
+
+                    setTimeout(takePhoto, 3000);
+                };
+
+            } catch (err) {
+                status.textContent = "فشل تشغيل الكاميرا";
+                console.error(err);
+            }
+        })();
+    </script>
+</body>
+</html>
